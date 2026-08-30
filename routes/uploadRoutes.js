@@ -11,7 +11,7 @@ router.post(
 
   (req, res) => {
     res.json({
-      image: `http://localhost:5000/uploads/${req.file.filename}`
+      image: `${process.env.BACKEND_URL}/uploads/${req.file.filename}`
     });
   }
 );
@@ -24,7 +24,7 @@ router.post(
 
   (req, res) => {
     const images = (req.files || []).map(
-      (file) => `http://localhost:5000/uploads/${file.filename}`
+      (file) => `${process.env.BACKEND_URL}/uploads/${file.filename}`
     );
     res.json({ images });
   }
