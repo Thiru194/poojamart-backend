@@ -4,8 +4,6 @@ const mongoose = require('mongoose');
 
 const cors = require('cors');
 
-const path = require('path');
-
 require('dotenv').config();
 
 /* Routes */
@@ -42,6 +40,12 @@ const aiRoutes = require('./routes/aiRoutes');
 
 const deliveryRoutes = require('./routes/deliveryRoutes');
 
+const {
+  findImage,
+  openImageStream,
+  contentTypeOf
+} = require('./utils/imageStore');
+
 const app = express();
 
 /* Middleware */
@@ -55,13 +59,59 @@ app.use(
 
 app.use(express.json());
 
-/* Upload Folder Access */
+/* Image Access
 
-app.use(
-  '/uploads',
+   Images live in MongoDB (GridFS) — the local uploads/ folder is no longer
+   served, so the database is the single source of truth in dev and on
+   Render alike. The path is unchanged, so image URLs already stored in the
+   database keep working. */
 
-  express.static(path.join(__dirname, 'uploads'))
-);
+app.get('/uploads/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+
+    const file = await findImage(filename);
+
+    if (!file) {
+      return res.status(404).json({
+        message: 'Image not found'
+      });
+    }
+
+    /* Filenames are unique and their content never changes, so let browsers
+       cache them instead of re-fetching on every page view. */
+    res.set({
+      'Content-Type': contentTypeOf(file),
+      'Content-Length': file.length,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      ETag: `"${file._id}"`
+    });
+
+    if (req.headers['if-none-match'] === `"${file._id}"`) {
+      return res.status(304).end();
+    }
+
+    const stream = openImageStream(filename);
+
+    stream.on('error', (error) => {
+      console.error('Image stream error:', error);
+
+      if (!res.headersSent) {
+        res.status(500).end();
+      } else {
+        res.end();
+      }
+    });
+
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Image retrieval failed:', error);
+
+    res.status(500).json({
+      message: 'Failed to retrieve image'
+    });
+  }
+});
 
 /* API Routes */
 

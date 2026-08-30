@@ -10,6 +10,8 @@ const supportEmailTemplate = require('../utils/supportEmailTemplate');
 
 const refundAdminEmailTemplate = require('../utils/refundAdminEmailTemplate');
 
+const { readImageBuffer } = require('../utils/imageStore');
+
 // Create Refund
 
 const createRefund = async (req, res) => {
@@ -67,23 +69,34 @@ const notifyAdminRefund = async (refund) => {
 
   const cids = [];
 
-  (refund.images || []).forEach((url, i) => {
-    const filename = String(url).split('/').pop();
+  const images = refund.images || [];
 
-    const diskPath = path.join(__dirname, '..', 'uploads', filename);
+  for (let i = 0; i < images.length; i++) {
+    const filename = String(images[i]).split('/').pop();
 
-    if (fs.existsSync(diskPath)) {
+    /* Evidence photos live in MongoDB; older ones may still be on disk. */
+    let content = await readImageBuffer(filename);
+
+    if (!content) {
+      const diskPath = path.join(__dirname, '..', 'uploads', filename);
+
+      if (fs.existsSync(diskPath)) {
+        content = fs.readFileSync(diskPath);
+      }
+    }
+
+    if (content) {
       const cid = `refundimg${i}`;
 
       attachments.push({
         filename,
-        content: fs.readFileSync(diskPath),
+        content,
         cid
       });
 
       cids.push(cid);
     }
-  });
+  }
 
   await sendEmail(
     adminEmail,

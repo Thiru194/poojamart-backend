@@ -14,6 +14,8 @@ const sendSms = require('../utils/smsClient');
 
 const { createNotification } = require('./notificationController');
 
+const { readImageBuffer } = require('../utils/imageStore');
+
 /* Get All Products */
 
 const getProducts = async (req, res) => {
@@ -180,8 +182,15 @@ const loadProductImage = async (rawImg) => {
       return { filename: 'product.jpg', content: buffer, cid };
     }
 
-    /* Local upload path like "/uploads/xyz.jpg" — read it off disk. */
+    /* Local upload path like "/uploads/xyz.jpg" — pull it out of MongoDB,
+       falling back to disk for images still sitting in the local folder. */
     const filename = rawImg.split('/').pop();
+
+    const stored = await readImageBuffer(filename);
+
+    if (stored) {
+      return { filename, content: stored, cid };
+    }
 
     const diskPath = path.join(__dirname, '..', 'uploads', filename);
 
